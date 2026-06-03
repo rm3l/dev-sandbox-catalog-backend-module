@@ -122,14 +122,14 @@ export class DevSandboxEntityProvider implements EntityProvider {
     kc.loadFromCluster();
     const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
 
-    const response = await customApi.listNamespacedCustomObject({
-      group: KUBESAW_API_GROUP,
-      version: KUBESAW_API_VERSION,
+    const response = await customApi.listNamespacedCustomObject(
+      KUBESAW_API_GROUP,
+      KUBESAW_API_VERSION,
       namespace,
-      plural: USERACCOUNT_PLURAL,
-    });
+      USERACCOUNT_PLURAL,
+    );
 
-    const userAccountList = response as UserAccountList;
+    const userAccountList = response.body as unknown as UserAccountList;
     const userAccounts = userAccountList.items.filter(
       ua => !ua.spec.disabled,
     );
