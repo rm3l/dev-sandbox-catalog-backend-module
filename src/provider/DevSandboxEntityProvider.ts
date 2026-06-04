@@ -8,7 +8,7 @@ import {
   ANNOTATION_LOCATION,
   ANNOTATION_ORIGIN_LOCATION,
 } from '@backstage/catalog-model';
-import type { UserEntity } from '@backstage/catalog-model';
+import type { GroupEntity, UserEntity } from '@backstage/catalog-model';
 import type { Config } from '@backstage/config';
 import { InputError, NotFoundError } from '@backstage/errors';
 import type {
@@ -22,6 +22,7 @@ import {
   type DevSandboxProviderConfig,
 } from './config';
 
+const SANDBOX_USERS_GROUP = 'sandbox-users';
 const KUBESAW_API_GROUP = 'toolchain.dev.openshift.com';
 const KUBESAW_API_VERSION = 'v1alpha1';
 const USERACCOUNT_PLURAL = 'useraccounts';
@@ -135,6 +136,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
     );
 
     const users = userAccounts.map(ua => this.toUserEntity(ua));
+    const group = this.toGroupEntity(users);
 
     logger.info(
       `Read ${users.length} active UserAccounts from namespace ${namespace}`,
@@ -142,7 +144,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
 
     await this.connection.applyMutation({
       type: 'full',
-      entities: users.map(entity => ({
+      entities: [...users, group].map(entity => ({
         locationKey: `dev-sandbox-provider:${this.options.id}`,
         entity,
       })),
@@ -169,7 +171,28 @@ export class DevSandboxEntityProvider implements EntityProvider {
         profile: {
           email: ua.spec.propagatedClaims?.email,
         },
-        memberOf: [],
+        memberOf: [SANDBOX_USERS_GROUP],
+      },
+    };
+  }
+
+  private toGroupEntity(users: UserEntity[]): GroupEntity {
+    const location = `dev-sandbox:group/${SANDBOX_USERS_GROUP}`;
+    return {
+      apiVersion: 'backstage.io/v1alpha1',
+      kind: 'Group',
+      metadata: {
+        name: SANDBOX_USERS_GROUP,
+        description: 'All users provisioned in Dev Sandbox on this cluster',
+        annotations: {
+          [ANNOTATION_LOCATION]: location,
+          [ANNOTATION_ORIGIN_LOCATION]: location,
+        },
+      },
+      spec: {
+        type: 'team',
+        children: [],
+        members: users.map(u => u.metadata.name),
       },
     };
   }

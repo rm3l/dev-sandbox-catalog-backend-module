@@ -24,5 +24,6 @@ export declare class DevSandboxEntityProvider implements EntityProvider {
         logger?: LoggerService;
     }): Promise<void>;
     private toUserEntity;
+    private toGroupEntity;
     private schedule;
 }
