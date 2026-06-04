@@ -6,6 +6,8 @@ export declare class DevSandboxEntityProvider implements EntityProvider {
     private options;
     private connection?;
     private scheduleFn?;
+    private userAccounts;
+    private kc;
     static fromConfig(deps: {
         config: Config;
         logger: LoggerService;
@@ -20,9 +22,10 @@ export declare class DevSandboxEntityProvider implements EntityProvider {
     });
     getProviderName(): string;
     connect(connection: EntityProviderConnection): Promise<void>;
-    read(options?: {
-        logger?: LoggerService;
-    }): Promise<void>;
+    private fullSync;
+    private startWatch;
+    private applyFullMutation;
+    private applyDeltaMutation;
     private toUserEntity;
     private toGroupEntity;
     private schedule;

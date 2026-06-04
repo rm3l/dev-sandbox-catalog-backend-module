@@ -26,6 +26,7 @@ const SANDBOX_USERS_GROUP = 'sandbox-users';
 const KUBESAW_API_GROUP = 'toolchain.dev.openshift.com';
 const KUBESAW_API_VERSION = 'v1alpha1';
 const USERACCOUNT_PLURAL = 'useraccounts';
+const WATCH_PATH = `/apis/${KUBESAW_API_GROUP}/${KUBESAW_API_VERSION}`;
 
 interface UserAccountResource {
   metadata: {
@@ -33,6 +34,7 @@ interface UserAccountResource {
     namespace: string;
     uid: string;
     creationTimestamp: string;
+    resourceVersion?: string;
     labels?: Record<string, string>;
   };
   spec: {
@@ -55,12 +57,17 @@ interface UserAccountResource {
 }
 
 interface UserAccountList {
+  metadata: {
+    resourceVersion: string;
+  };
   items: UserAccountResource[];
 }
 
 export class DevSandboxEntityProvider implements EntityProvider {
   private connection?: EntityProviderConnection;
   private scheduleFn?: () => Promise<void>;
+  private userAccounts = new Map<string, UserAccountResource>();
+  private kc: k8s.KubeConfig;
 
   static fromConfig(
     deps: { config: Config; logger: LoggerService },
@@ -95,6 +102,8 @@ export class DevSandboxEntityProvider implements EntityProvider {
       taskRunner: SchedulerServiceTaskRunner;
     },
   ) {
+    this.kc = new k8s.KubeConfig();
+    this.kc.loadFromCluster();
     this.schedule(options.taskRunner);
   }
 
@@ -104,24 +113,28 @@ export class DevSandboxEntityProvider implements EntityProvider {
 
   async connect(connection: EntityProviderConnection): Promise<void> {
     this.connection = connection;
+
+    // Initial full sync, then start watching
+    await this.fullSync();
+    this.startWatch();
+
+    // Periodic full sync as safety net (via scheduler)
     await this.scheduleFn?.();
   }
 
-  async read(options?: { logger?: LoggerService }) {
+  private async fullSync() {
     if (!this.connection) {
       throw new NotFoundError('Not initialized');
     }
 
-    const logger = options?.logger ?? this.options.logger;
+    const logger = this.options.logger;
     const { namespace } = this.options.provider;
 
     logger.info(
-      `Reading UserAccount CRs from namespace ${namespace}`,
+      `Full sync: listing UserAccount CRs from namespace ${namespace}`,
     );
 
-    const kc = new k8s.KubeConfig();
-    kc.loadFromCluster();
-    const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
+    const customApi = this.kc.makeApiClient(k8s.CustomObjectsApi);
 
     const response = await customApi.listNamespacedCustomObject(
       KUBESAW_API_GROUP,
@@ -131,23 +144,140 @@ export class DevSandboxEntityProvider implements EntityProvider {
     );
 
     const userAccountList = response.body as unknown as UserAccountList;
-    const userAccounts = userAccountList.items.filter(
-      ua => !ua.spec.disabled,
-    );
 
-    const users = userAccounts.map(ua => this.toUserEntity(ua));
-    const group = this.toGroupEntity(users);
+    this.userAccounts.clear();
+    for (const ua of userAccountList.items) {
+      if (!ua.spec.disabled) {
+        this.userAccounts.set(ua.metadata.name, ua);
+      }
+    }
+
+    await this.applyFullMutation();
 
     logger.info(
-      `Read ${users.length} active UserAccounts from namespace ${namespace}`,
+      `Full sync complete: ${this.userAccounts.size} active UserAccounts`,
     );
+  }
+
+  private startWatch() {
+    const logger = this.options.logger;
+    const { namespace } = this.options.provider;
+    const watchPath = `${WATCH_PATH}/namespaces/${namespace}/${USERACCOUNT_PLURAL}`;
+
+    const watch = new k8s.Watch(this.kc);
+
+    logger.info(`Starting watch on ${watchPath}`);
+
+    watch.watch(
+      watchPath,
+      {},
+      async (type: string, obj: UserAccountResource) => {
+        const name = obj.metadata.name;
+
+        switch (type) {
+          case 'ADDED':
+          case 'MODIFIED':
+            if (obj.spec.disabled) {
+              if (this.userAccounts.has(name)) {
+                this.userAccounts.delete(name);
+                await this.applyDeltaMutation([], [name]);
+                logger.info(`User ${name} disabled, removed from catalog`);
+              }
+            } else {
+              const isNew = !this.userAccounts.has(name);
+              this.userAccounts.set(name, obj);
+              if (isNew) {
+                await this.applyDeltaMutation([obj], []);
+                logger.info(`User ${name} added to catalog`);
+              } else {
+                await this.applyDeltaMutation([obj], []);
+                logger.info(`User ${name} updated in catalog`);
+              }
+            }
+            break;
+
+          case 'DELETED':
+            if (this.userAccounts.has(name)) {
+              this.userAccounts.delete(name);
+              await this.applyDeltaMutation([], [name]);
+              logger.info(`User ${name} deleted, removed from catalog`);
+            }
+            break;
+
+          default:
+            break;
+        }
+      },
+      (err?: unknown) => {
+        if (err) {
+          logger.error('Watch connection lost, will re-sync', {
+            message: (err as Error)?.message,
+          });
+        }
+        // Reconnect after a short delay
+        setTimeout(() => {
+          this.fullSync()
+            .then(() => this.startWatch())
+            .catch(e =>
+              logger.error('Failed to re-sync after watch error', {
+                message: (e as Error).message,
+              }),
+            );
+        }, 5000);
+      },
+    );
+  }
+
+  private async applyFullMutation() {
+    if (!this.connection) return;
+
+    const users = Array.from(this.userAccounts.values()).map(ua =>
+      this.toUserEntity(ua),
+    );
+    const group = this.toGroupEntity(users);
+    const locationKey = `dev-sandbox-provider:${this.options.id}`;
 
     await this.connection.applyMutation({
       type: 'full',
       entities: [...users, group].map(entity => ({
-        locationKey: `dev-sandbox-provider:${this.options.id}`,
+        locationKey,
         entity,
       })),
+    });
+  }
+
+  private async applyDeltaMutation(
+    added: UserAccountResource[],
+    removedNames: string[],
+  ) {
+    if (!this.connection) return;
+
+    const locationKey = `dev-sandbox-provider:${this.options.id}`;
+    const addedUsers = added.map(ua => this.toUserEntity(ua));
+
+    // Always re-emit the group with updated membership
+    const allUsers = Array.from(this.userAccounts.values()).map(ua =>
+      this.toUserEntity(ua),
+    );
+    const group = this.toGroupEntity(allUsers);
+
+    const addedEntities = [...addedUsers, group].map(entity => ({
+      locationKey,
+      entity,
+    }));
+
+    const removedEntities = removedNames.map(name => ({
+      locationKey,
+      entity: this.toUserEntity({
+        metadata: { name, namespace: '', uid: '' } as UserAccountResource['metadata'],
+        spec: {},
+      }),
+    }));
+
+    await this.connection.applyMutation({
+      type: 'delta',
+      added: addedEntities,
+      removed: removedEntities,
     });
   }
 
@@ -197,6 +327,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
     };
   }
 
+  // Periodic full sync as safety net — catches anything the watch might miss
   private schedule(taskRunner: SchedulerServiceTaskRunner) {
     this.scheduleFn = async () => {
       const id = `${this.getProviderName()}:refresh`;
@@ -208,9 +339,9 @@ export class DevSandboxEntityProvider implements EntityProvider {
             taskId: id,
           });
           try {
-            await this.read({ logger });
+            await this.fullSync();
           } catch (error) {
-            logger.error('Error syncing Dev Sandbox users', {
+            logger.error('Error during periodic full sync', {
               name: (error as Error).name,
               message: (error as Error).message,
               stack: (error as Error).stack,

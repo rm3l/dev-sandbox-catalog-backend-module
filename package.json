@@ -1,6 +1,6 @@
 {
   "name": "@dev-sandbox/plugin-catalog-backend-module-dev-sandbox",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Backstage catalog backend module that syncs Dev Sandbox UserAccount CRs into the catalog",
   "main": "src/index.ts",
   "types": "src/index.ts",
