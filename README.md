@@ -7,9 +7,9 @@ into the [Red Hat Developer Hub](https://developers.redhat.com/rhdh) (RHDH) cata
 ## Why
 
 RHDH instances deployed on Dev Sandbox member clusters need to know which users
-are provisioned on the cluster. In production the SSO realm (`redhat-external`
-on `sso.redhat.com`) contains millions of Red Hat accounts, so the Keycloak
-catalog provider cannot be used to scope users to just Sandbox users.
+are provisioned on the cluster. In production, the SSO realm may contain
+thousands of Red Hat accounts, so the Keycloak catalog provider cannot be used
+to scope users to just Sandbox users.
 
 This plugin solves the problem by watching the `UserAccount` CRs that the
 KubeSaw member-operator creates when a user is provisioned on a member cluster.
@@ -189,15 +189,22 @@ spec:
 
 ```bash
 yarn install
-yarn build
-yarn export-dynamic
+yarn tsc && yarn build
 ```
 
-The `export-dynamic` script produces the dynamic plugin artifact under
-`dist-dynamic/`, which can then be published to an OCI registry:
+To package the dynamic plugin:
 
 ```bash
-podman push dist-dynamic/ oci://quay.io/<org>/dev-sandbox-catalog-backend-module:0.3.0
+export QUAY_USER=$USER
+export PLUGIN_NAME=dev-sandbox-catalog-backend-module
+export VERSION=$(cat package.json | jq .version -r)
+npx @red-hat-developer-hub/cli@latest plugin package --tag quay.io/$QUAY_USER/$PLUGIN_NAME:$VERSION
+```
+
+To push to the OCI registry:
+
+```bash
+podman push quay.io/$QUAY_USER/$PLUGIN_NAME:$VERSION
 ```
 
 ## License
