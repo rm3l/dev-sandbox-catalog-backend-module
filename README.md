@@ -51,8 +51,7 @@ permissions to all Dev Sandbox users.
 
 ### App-config
 
-Add the following to your RHDH `app-config` (e.g. in a ConfigMap labeled
-`rhdh.redhat.com/external-config: "true"`):
+Add the following to your RHDH `app-config`:
 
 ```yaml
 catalog:
@@ -77,22 +76,12 @@ different keys, each pointing to a different namespace.
 ### Dynamic plugins
 
 To load this plugin in RHDH as a dynamic plugin, add it to the dynamic plugins
-ConfigMap:
+configuration:
 
 ```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: developer-hub-plugins
-  labels:
-    rhdh.redhat.com/external-config: "true"
-data:
-  dynamic-plugins.yaml: |
-    includes:
-      - dynamic-plugins.default.yaml
-    plugins:
-      - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.3.0
-        disabled: false
+plugins:
+  - package: oci://quay.io/<org>/dev-sandbox-catalog-backend-module:0.3.0
+    disabled: false
 ```
 
 Then reference this ConfigMap in the `Backstage` CR:
