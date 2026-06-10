@@ -80,20 +80,8 @@ configuration:
 
 ```yaml
 plugins:
-  - package: oci://quay.io/<org>/dev-sandbox-catalog-backend-module:0.3.0
+  - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.3.0
     disabled: false
-```
-
-Then reference this ConfigMap in the `Backstage` CR:
-
-```yaml
-apiVersion: rhdh.redhat.com/v1alpha5
-kind: Backstage
-metadata:
-  name: developer-hub
-spec:
-  application:
-    dynamicPluginsConfigMapName: developer-hub-plugins
 ```
 
 ### RBAC for the RHDH ServiceAccount
@@ -133,9 +121,7 @@ subjects:
     namespace: rhdh-operator
 ```
 
-The `Backstage` CR must also be patched to use this ServiceAccount and mount a
-projected volume for the ServiceAccount token (since `automountServiceAccountToken`
-is `false`):
+If you are using RHDH using the [Operator](https://github.com/redhat-developer/rhdh-operator), the `Backstage` CR must be patched to use this ServiceAccount and mount a projected volume for the ServiceAccount token (since `automountServiceAccountToken` is `false` by default for security purposes):
 
 ```yaml
 apiVersion: rhdh.redhat.com/v1alpha5
