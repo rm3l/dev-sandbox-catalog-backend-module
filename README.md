@@ -121,7 +121,7 @@ subjects:
     namespace: rhdh-operator
 ```
 
-If you are using RHDH using the [Operator](https://github.com/redhat-developer/rhdh-operator), the `Backstage` CR must be patched to use this ServiceAccount and mount a projected volume for the ServiceAccount token (since `automountServiceAccountToken` is `false` by default for security purposes):
+If you are deploying RHDH using the [Operator](https://github.com/redhat-developer/rhdh-operator), the `Backstage` CR must be patched to use this ServiceAccount and mount a projected volume for the ServiceAccount token (since `automountServiceAccountToken` is `false` by default for security purposes):
 
 ```yaml
 apiVersion: rhdh.redhat.com/v1alpha5
