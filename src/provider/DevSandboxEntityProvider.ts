@@ -295,6 +295,9 @@ export class DevSandboxEntityProvider implements EntityProvider {
           [ANNOTATION_ORIGIN_LOCATION]: location,
           'dev-sandbox.redhat.com/user-account-name': name,
           'dev-sandbox.redhat.com/user-account-uid': ua.metadata.uid,
+          ...(ua.spec.propagatedClaims?.sub
+            ? { 'keycloak.org/id': ua.spec.propagatedClaims.sub }
+            : {}),
         },
       },
       spec: {

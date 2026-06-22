@@ -40,6 +40,7 @@ grouped under a `sandbox-users` group entity.
 |---|---|
 | `metadata.name` | `metadata.name` |
 | `metadata.uid` | `metadata.annotations['dev-sandbox.redhat.com/user-account-uid']` |
+| `spec.propagatedClaims.sub` | `metadata.annotations['keycloak.org/id']` |
 | `spec.propagatedClaims.email` | `spec.profile.email` |
 | _(all users)_ | `spec.memberOf: ['sandbox-users']` |
 
@@ -80,8 +81,33 @@ configuration:
 
 ```yaml
 plugins:
-  - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.3.0
+  - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.4.0
     disabled: false
+```
+
+### Sign-in resolver
+
+The `keycloak.org/id` annotation emitted by this plugin is compatible with
+RHDH's built-in `oidcSubClaimMatchingKeycloakUserId` sign-in resolver (available
+in RHDH 1.10+). This resolver matches users by the immutable OIDC `sub` claim
+rather than by email, which prevents impersonation if a user changes their email
+in SSO.
+
+To enable it, set the resolver in your OIDC provider config:
+
+```yaml
+auth:
+  providers:
+    oidc:
+      production:
+        metadataUrl: "${KEYCLOAK_BASE_URL}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration"
+        clientId: "${KEYCLOAK_CLIENT_ID}"
+        clientSecret: "${KEYCLOAK_CLIENT_SECRET}"
+        prompt: auto
+        additionalScopes: "profile email"
+        signIn:
+          resolvers:
+            - resolver: oidcSubClaimMatchingKeycloakUserId
 ```
 
 ### RBAC for the RHDH ServiceAccount
