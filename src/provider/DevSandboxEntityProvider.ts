@@ -244,18 +244,19 @@ export class DevSandboxEntityProvider implements EntityProvider {
   private async applyFullMutation() {
     if (!this.connection) return;
 
-    const users = Array.from(this.userAccounts.values()).map(ua =>
-      this.toUserEntity(ua),
-    );
-    const group = this.toGroupEntity(Array.from(this.userAccounts.keys()));
     const locationKey = `dev-sandbox-provider:${this.options.id}`;
+    const users = Array.from(this.userAccounts.values()).map(ua => ({
+      locationKey,
+      entity: this.toUserEntity(ua),
+    }));
+    const group = {
+      locationKey,
+      entity: this.toGroupEntity(),
+    };
 
     await this.connection.applyMutation({
       type: 'full',
-      entities: [...users, group].map(entity => ({
-        locationKey,
-        entity,
-      })),
+      entities: [...users, group],
     });
   }
 
@@ -266,15 +267,10 @@ export class DevSandboxEntityProvider implements EntityProvider {
     if (!this.connection) return;
 
     const locationKey = `dev-sandbox-provider:${this.options.id}`;
-    const addedUsers = added.map(ua => this.toUserEntity(ua));
 
-    // Re-emit the group with updated membership (names only — avoids
-    // reconstructing all 2000+ user entities on every watch event)
-    const group = this.toGroupEntity(Array.from(this.userAccounts.keys()));
-
-    const addedEntities = [...addedUsers, group].map(entity => ({
+    const addedEntities = added.map(ua => ({
       locationKey,
-      entity,
+      entity: this.toUserEntity(ua),
     }));
 
     const removedEntities = removedNames.map(name => ({
@@ -287,7 +283,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
 
     await this.connection.applyMutation({
       type: 'delta',
-      added: addedEntities,
+      added: [...addedEntities, { locationKey, entity: this.toGroupEntity() }],
       removed: removedEntities,
     });
   }
@@ -320,7 +316,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
     };
   }
 
-  private toGroupEntity(memberNames: string[]): GroupEntity {
+  private toGroupEntity(): GroupEntity {
     const location = `dev-sandbox:group/${SANDBOX_USERS_GROUP}`;
     return {
       apiVersion: 'backstage.io/v1alpha1',
@@ -336,7 +332,6 @@ export class DevSandboxEntityProvider implements EntityProvider {
       spec: {
         type: 'team',
         children: [],
-        members: memberNames,
       },
     };
   }
