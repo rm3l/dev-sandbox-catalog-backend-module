@@ -28,5 +28,6 @@ export declare class DevSandboxEntityProvider implements EntityProvider {
     private applyDeltaMutation;
     private toUserEntity;
     private toGroupEntity;
+    private trimUserAccount;
     private schedule;
 }

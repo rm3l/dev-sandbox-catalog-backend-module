@@ -27,13 +27,14 @@ const KUBESAW_API_GROUP = 'toolchain.dev.openshift.com';
 const KUBESAW_API_VERSION = 'v1alpha1';
 const USERACCOUNT_PLURAL = 'useraccounts';
 const WATCH_PATH = `/apis/${KUBESAW_API_GROUP}/${KUBESAW_API_VERSION}`;
+const PAGE_SIZE = 500;
 
 interface UserAccountResource {
   metadata: {
     name: string;
     namespace: string;
     uid: string;
-    creationTimestamp: string;
+    creationTimestamp?: string;
     resourceVersion?: string;
     labels?: Record<string, string>;
   };
@@ -59,6 +60,7 @@ interface UserAccountResource {
 interface UserAccountList {
   metadata: {
     resourceVersion: string;
+    continue?: string;
   };
   items: UserAccountResource[];
 }
@@ -136,21 +138,31 @@ export class DevSandboxEntityProvider implements EntityProvider {
 
     const customApi = this.kc.makeApiClient(k8s.CustomObjectsApi);
 
-    const response = await customApi.listNamespacedCustomObject(
-      KUBESAW_API_GROUP,
-      KUBESAW_API_VERSION,
-      namespace,
-      USERACCOUNT_PLURAL,
-    );
-
-    const userAccountList = response.body as unknown as UserAccountList;
-
     this.userAccounts.clear();
-    for (const ua of userAccountList.items) {
-      if (!ua.spec.disabled) {
-        this.userAccounts.set(ua.metadata.name, ua);
+
+    let continueToken: string | undefined;
+    do {
+      const response = await customApi.listNamespacedCustomObject(
+        KUBESAW_API_GROUP,
+        KUBESAW_API_VERSION,
+        namespace,
+        USERACCOUNT_PLURAL,
+        undefined,
+        undefined,
+        continueToken,
+        undefined,
+        undefined,
+        PAGE_SIZE,
+      );
+
+      const batch = response.body as unknown as UserAccountList;
+      for (const ua of batch.items) {
+        if (!ua.spec.disabled) {
+          this.userAccounts.set(ua.metadata.name, this.trimUserAccount(ua));
+        }
       }
-    }
+      continueToken = batch.metadata.continue;
+    } while (continueToken);
 
     await this.applyFullMutation();
 
@@ -185,12 +197,13 @@ export class DevSandboxEntityProvider implements EntityProvider {
               }
             } else {
               const isNew = !this.userAccounts.has(name);
-              this.userAccounts.set(name, obj);
+              const trimmed = this.trimUserAccount(obj);
+              this.userAccounts.set(name, trimmed);
               if (isNew) {
-                await this.applyDeltaMutation([obj], []);
+                await this.applyDeltaMutation([trimmed], []);
                 logger.info(`User ${name} added to catalog`);
               } else {
-                await this.applyDeltaMutation([obj], []);
+                await this.applyDeltaMutation([trimmed], []);
                 logger.info(`User ${name} updated in catalog`);
               }
             }
@@ -234,7 +247,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
     const users = Array.from(this.userAccounts.values()).map(ua =>
       this.toUserEntity(ua),
     );
-    const group = this.toGroupEntity(users);
+    const group = this.toGroupEntity(Array.from(this.userAccounts.keys()));
     const locationKey = `dev-sandbox-provider:${this.options.id}`;
 
     await this.connection.applyMutation({
@@ -255,11 +268,9 @@ export class DevSandboxEntityProvider implements EntityProvider {
     const locationKey = `dev-sandbox-provider:${this.options.id}`;
     const addedUsers = added.map(ua => this.toUserEntity(ua));
 
-    // Always re-emit the group with updated membership
-    const allUsers = Array.from(this.userAccounts.values()).map(ua =>
-      this.toUserEntity(ua),
-    );
-    const group = this.toGroupEntity(allUsers);
+    // Re-emit the group with updated membership (names only — avoids
+    // reconstructing all 2000+ user entities on every watch event)
+    const group = this.toGroupEntity(Array.from(this.userAccounts.keys()));
 
     const addedEntities = [...addedUsers, group].map(entity => ({
       locationKey,
@@ -269,7 +280,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
     const removedEntities = removedNames.map(name => ({
       locationKey,
       entity: this.toUserEntity({
-        metadata: { name, namespace: '', uid: '' } as UserAccountResource['metadata'],
+        metadata: { name, namespace: '', uid: '' },
         spec: {},
       }),
     }));
@@ -309,7 +320,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
     };
   }
 
-  private toGroupEntity(users: UserEntity[]): GroupEntity {
+  private toGroupEntity(memberNames: string[]): GroupEntity {
     const location = `dev-sandbox:group/${SANDBOX_USERS_GROUP}`;
     return {
       apiVersion: 'backstage.io/v1alpha1',
@@ -325,7 +336,22 @@ export class DevSandboxEntityProvider implements EntityProvider {
       spec: {
         type: 'team',
         children: [],
-        members: users.map(u => u.metadata.name),
+        members: memberNames,
+      },
+    };
+  }
+
+  private trimUserAccount(ua: UserAccountResource): UserAccountResource {
+    return {
+      metadata: {
+        name: ua.metadata.name,
+        namespace: ua.metadata.namespace,
+        uid: ua.metadata.uid,
+      },
+      spec: {
+        propagatedClaims: ua.spec.propagatedClaims
+          ? { email: ua.spec.propagatedClaims.email, sub: ua.spec.propagatedClaims.sub }
+          : undefined,
       },
     };
   }
