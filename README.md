@@ -44,9 +44,10 @@ grouped under a `sandbox-users` group entity.
 | `spec.propagatedClaims.email` | `spec.profile.email` |
 | _(all users)_ | `spec.memberOf: ['sandbox-users']` |
 
-A `Group` entity named `sandbox-users` is also emitted, with all provisioned
-users listed as members. This group can be used in RBAC policies to grant
-permissions to all Dev Sandbox users.
+A `Group` entity named `sandbox-users` is also emitted. Membership is
+established through `User.spec.memberOf` rather than `Group.spec.members`,
+so the group page does not expose the full member list. This group can be
+used in RBAC policies to grant permissions to all Dev Sandbox users.
 
 ## Configuration
 
@@ -81,7 +82,7 @@ configuration:
 
 ```yaml
 plugins:
-  - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.4.0
+  - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.6.0
     disabled: false
 ```
 
