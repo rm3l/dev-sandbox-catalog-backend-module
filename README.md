@@ -191,10 +191,10 @@ spec:
 
 ```bash
 yarn install
-yarn tsc && yarn build
+yarn tsc && yarn build && npx @red-hat-developer-hub/cli@latest plugin export
 ```
 
-To package the dynamic plugin:
+To package the dynamic plugin as an OCI image:
 
 ```bash
 export QUAY_USER=$USER
