@@ -193,7 +193,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
               if (this.userAccounts.has(name)) {
                 this.userAccounts.delete(name);
                 await this.applyDeltaMutation([], [name]);
-                logger.info(`User ${name} disabled, removed from catalog`);
+                logger.debug(`User ${name} disabled, removed from catalog`);
               }
             } else {
               const isNew = !this.userAccounts.has(name);
@@ -201,10 +201,10 @@ export class DevSandboxEntityProvider implements EntityProvider {
               this.userAccounts.set(name, trimmed);
               if (isNew) {
                 await this.applyDeltaMutation([trimmed], []);
-                logger.info(`User ${name} added to catalog`);
+                logger.debug(`User ${name} added to catalog`);
               } else {
                 await this.applyDeltaMutation([trimmed], []);
-                logger.info(`User ${name} updated in catalog`);
+                logger.debug(`User ${name} updated in catalog`);
               }
             }
             break;
@@ -213,7 +213,7 @@ export class DevSandboxEntityProvider implements EntityProvider {
             if (this.userAccounts.has(name)) {
               this.userAccounts.delete(name);
               await this.applyDeltaMutation([], [name]);
-              logger.info(`User ${name} deleted, removed from catalog`);
+              logger.debug(`User ${name} deleted, removed from catalog`);
             }
             break;
 
