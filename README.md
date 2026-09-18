@@ -191,7 +191,7 @@ spec:
 
 ```bash
 yarn install
-yarn tsc && yarn build && npx @red-hat-developer-hub/cli@latest plugin export
+yarn tsc && yarn build && npx @red-hat-developer-hub/cli@1.10.8 plugin export
 ```
 
 To package the dynamic plugin as an OCI image:
@@ -200,7 +200,7 @@ To package the dynamic plugin as an OCI image:
 export QUAY_USER=$USER
 export PLUGIN_NAME=dev-sandbox-catalog-backend-module
 export VERSION=$(cat package.json | jq .version -r)
-npx @red-hat-developer-hub/cli@latest plugin package --tag quay.io/$QUAY_USER/$PLUGIN_NAME:$VERSION
+npx @red-hat-developer-hub/cli@1.10.8 plugin package --tag quay.io/$QUAY_USER/$PLUGIN_NAME:$VERSION
 ```
 
 To push to the OCI registry:

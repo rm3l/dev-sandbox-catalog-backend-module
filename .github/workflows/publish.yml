@@ -25,14 +25,14 @@ jobs:
 
       - run: yarn install --frozen-lockfile
 
-      - run: yarn tsc && yarn build && npx --yes @red-hat-developer-hub/cli@latest plugin export
+      - run: yarn tsc && yarn build && npx --yes @red-hat-developer-hub/cli@1.10.8 plugin export
 
       - name: Read version from package.json
         id: version
         run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
 
       - name: Package dynamic plugin
-        run: npx --yes @red-hat-developer-hub/cli@latest plugin package --tag "$IMAGE_NAME:${{ steps.version.outputs.version }}"
+        run: npx --yes @red-hat-developer-hub/cli@1.10.8 plugin package --tag "$IMAGE_NAME:${{ steps.version.outputs.version }}"
 
       - name: Tag as latest
         run: podman tag "$IMAGE_NAME:${{ steps.version.outputs.version }}" "$IMAGE_NAME:latest"
